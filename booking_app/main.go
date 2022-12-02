@@ -1,61 +1,70 @@
 package main
 
 import (
+	"booking_app/helper/helper"
 	"fmt"
-	"strings"
+	"sync"
 )
 
 // Package level params
 var confTickets uint = 50
 var remTickets uint = confTickets
 var conferenceName = "Go Conference"
-var bookingsInfo = []string{}
+var bookingsInfo = make([]UserData, 0) // make([]map[string]string, 0) making slice of maps
+var globalVarFromHelper string = helper.MyGlobalvar
+
+type UserData struct {
+	firstName      string
+	lastName       string
+	email          string
+	numberOfTicket uint
+}
+
+var wg = sync.WaitGroup{}
 
 func main() {
 
 	//greet
-	greetUser()
+	greetUser(conferenceName)
 
-	for {
+	fmt.Println("Kindly provide the following details.")
 
-		fmt.Println("Kindly provide the following details.")
+	userFirstName, userLastName, userEmailAddress, userTicketNum := getUserDetails()
 
-		userFirstName, userLastName, userEmailAddress, userTicketNum := getUserDetails()
-
-		if userTicketNum > remTickets {
-			fmt.Printf("We only have %d tickets remaining. So you can't book %d tickets\n", remTickets, userTicketNum)
-			continue
-		}
-
-		isValidInputs := isValidEmailAddress(userEmailAddress) && isValidNames(userFirstName, userLastName) && isValidTicketNumber(userTicketNum)
-
-		if isValidInputs {
-			remTickets = makeBooking(userTicketNum,
-				userLastName, userFirstName, userEmailAddress)
-		} else {
-			if isValidEmailAddress(userEmailAddress) {
-				fmt.Print("Email address is not valid.\n")
-			}
-
-			if !isValidNames(userFirstName, userLastName) {
-				fmt.Print("Invalid. First or Last name is less than two characters.")
-			}
-
-			if !isValidTicketNumber(userTicketNum) {
-				fmt.Print("Tickets number cannot be greater than the remaining tickets.")
-			}
-		}
-
-		if remTickets == 0 {
-			fmt.Print("Tickets finished for the conf.\n")
-			break
-		}
-
+	if userTicketNum > remTickets {
+		fmt.Printf("We only have %d tickets remaining. So you can't book %d tickets\n", remTickets, userTicketNum)
+		// continue
 	}
 
+	isValidInputs := helper.IsValidEmailAddress(userEmailAddress) && helper.IsValidNames(userFirstName, userLastName) && helper.IsValidTicketNumber(userTicketNum, remTickets)
+
+	if isValidInputs {
+		remTickets = makeBooking(userTicketNum,
+			userLastName, userFirstName, userEmailAddress)
+	} else {
+		if !helper.IsValidEmailAddress(userEmailAddress) {
+			fmt.Print("Email address is not valid.\n")
+		}
+
+		if !helper.IsValidNames(userFirstName, userLastName) {
+			fmt.Print("Invalid. First or Last name is less than two characters.")
+		}
+
+		if !helper.IsValidTicketNumber(userTicketNum, remTickets) {
+			fmt.Print("Tickets number cannot be greater than the remaining tickets.")
+		}
+	}
+
+	if remTickets == 0 {
+		fmt.Print("Tickets finished for the conf.\n")
+		// break
+	}
+
+	wg.Wait() // blocks the thread until waitgroup finishes executing goroutines
 }
 
-func greetUser() {
+func greetUser(conferenceName string) {
+	fmt.Printf("Welcome to %s booking application.\n", conferenceName)
 	fmt.Printf("Welcome to %s booking application.\n", conferenceName)
 	fmt.Printf("We have a total of  %d tickets available and %d tickets are remaining for booking.\n", confTickets, remTickets)
 	fmt.Println("Book your ticket here to attend.")
@@ -90,11 +99,27 @@ func makeBooking(userTicketNum uint,
 
 	confTickets = confTickets - userTicketNum
 	remTickets = confTickets
-	bookingsInfo = append(bookingsInfo, userFirstName+" "+userLastName)
 
-	firstNames := extractFirstNames()
+	var userData = UserData{
+		firstName:      userFirstName,
+		lastName:       userLastName,
+		email:          userEmailAddress,
+		numberOfTicket: userTicketNum,
+	}
 
-	fmt.Printf("%v are names of all bookings for the %s.\n", firstNames, conferenceName)
+	// userData["numberOfTicket"] = strconv.FormatUint(uint64(userTicketNum), 10) convert uint to string to uint
+	//fmt.Sprint(userTicketNum)
+
+	bookingsInfo = append(bookingsInfo, userData)
+	wg.Add(1) // add the number of goroutines
+
+	go helper.SendTicket(userEmailAddress, userFirstName, userLastName, userTicketNum) // execute in a separate thread now
+
+	fmt.Printf("List of data: %v\n", bookingsInfo)
+
+	firstNames := extractFirstNames
+
+	fmt.Printf("%s are names of all bookings for the %s.\n", firstNames, conferenceName)
 
 	fmt.Printf("%d tickets remaining for the %s.\n", remTickets, conferenceName)
 
@@ -102,25 +127,11 @@ func makeBooking(userTicketNum uint,
 }
 
 func extractFirstNames() []string {
-	firstNames := []string{}
+	firstNames := []string{} // slice of string
 
 	for _, bookingInfo := range bookingsInfo {
-		var userName = strings.Fields(bookingInfo)
-		var firstName = userName[0]
-		firstNames = append(firstNames, firstName)
+		//strings.Fields(bookingInfo) string splitting
+		firstNames = append(firstNames, bookingInfo.firstName)
 	}
-
 	return firstNames
-}
-
-func isValidTicketNumber(ticketsNum uint) bool {
-	return ticketsNum > 0 && ticketsNum <= remTickets
-}
-
-func isValidEmailAddress(emailAddress string) bool {
-	return strings.Contains(emailAddress, "@")
-}
-
-func isValidNames(firstName string, lastName string) bool {
-	return len(firstName) >= 2 && len(lastName) >= 2
 }
